@@ -193,6 +193,22 @@ independent of what the action declares.
 This is the reason the metadata must store the *terminal* resolved path rather
 than the immediate target.
 
+**(5) How a tree alias's contents are staged — symlinks are already content.**
+A tree alias never has to stage or relocate a symlink, because a tree artifact's
+value model contains none. A tree is a content-addressed, relocatable unit: its
+digest is a fingerprint over `(childPath, childContentDigest)` pairs, which is
+what lets any strategy materialize it at the alias's exec path (or a remote
+Merkle tree) from the digest alone. To preserve that,
+`TreeArtifactValue.visitTree` — the canonical tree capture — *dereferences* every
+on-disk symlink into the regular file or directory it points to (recursively)
+and *errors* on a dangling or tree-escaping link; the visitor is never handed a
+`SYMLINK` entry, so every child is a regular file with content and a digest.
+Consequently a tree alias re-addresses a child set that is already pure content:
+there is no symlink target to point in-sandbox vs. out-of-sandbox (the tension of
+part (1)), and parts (2)–(3) apply per child unchanged. This is *why* tree-to-tree
+aliasing is over regular files only — not a limitation of the alias, but a
+property of tree artifacts that the alias inherits for free.
+
 Illustrative (not normative) laydowns per strategy:
 
 | Strategy | `output` realized as | Bytes moved by Bazel |
