@@ -15,9 +15,10 @@ must present inputs at a canonical layout — rules_js co-locating sources under
 trees — express that need by *copying*, because copying is the only primitive
 available. This proposal adds artifact aliasing: `ctx.actions.alias(output,
 actual)` declares that `output` **is** `actual`'s content under a second exec
-path. `actual` may be a **file or a directory tree** — the same relation applies
-to both. It is not a copy and not a transformation; it is an identity relation on
-*content*. How that identity is realized on disk (symlink, hardlink, copy, or
+path. Both **file-to-file** and **tree-to-tree (directory)** aliases are in scope
+and supported; `output` and `actual` must be the same kind (file↔file,
+tree↔tree). It is not a copy and not a transformation; it is an identity relation
+on *content*. How that identity is realized on disk (symlink, hardlink, copy, or
 remote digest reuse) is deliberately left unspecified so the executor can pick
 the cheapest correct laydown.
 
