@@ -58,7 +58,7 @@ stateDiagram-v2
 
 | Last updated | Title                                                                                                                           | Author(s) alias                          | Category |
 |--------------|---------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|----------|
-|   2026-07-22 | [Artifact Aliasing](designs/2026-07-20-artifact-alias.md) | [@thesayyn](https://github.com/thesayyn) | Actions |
+|   2026-07-20 | [Artifact Aliasing](designs/2026-07-20-artifact-alias.md) | [@thesayyn](https://github.com/thesayyn) | Actions |
 |   2026-07-21 | [Sandbox Protocol](designs/2026-07-21-sandbox-protocol.md) | [@thesayyn](https://github.com/thesayyn) | Sandboxing |
 |   2026-06-02 | [BCR Module indexing](designs/2026-04-14-bcr-module-indexing.md) | [@jordan-bonser](https://github.com/jordan-bonser) | External Repositories |
 |   2026-03-03 | [Hierarchical constraint settings](https://docs.google.com/document/d/1Lq-0aPBOT0cat1wcFbnPmurbyo05NpZXu0uGq12H_HE/edit?usp=sharing) | [@fmeum](https://github.com/fmeum) | Configurability |
