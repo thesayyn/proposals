@@ -1,12 +1,12 @@
 ---
 created: 2026-07-21
 last updated: 2026-07-21
-status: To be reviewed
+status: Draft
 reviewers:
   - fmeum
-title: Sandbox backend protocol
+title:  Sandbox Protocol
 authors:
-  - Sahin Yort (thesayyn@gmail.com, sahin@aspect.build)
+  - thesayyn
 ---
 
 # Abstract
