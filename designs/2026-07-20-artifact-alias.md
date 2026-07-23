@@ -54,6 +54,61 @@ Prior art: RBE providers already detect known copy actions and synthesize an
 `ActionResult` to skip execution. That is an alias realized by digest reuse —
 done today outside Bazel because Bazel lacks the concept.
 
+## Motivating evidence
+
+Relocation — presenting a file or tree at a second exec path — recurs across
+rulesets, and today forces one of two costly workarounds:
+
+- **Eager `ctx.actions.symlink`** — materialized as a symlink at build time
+  regardless of the consuming strategy (realpath-escape + RBE materialization
+  problems): rules_js `node_modules`, rules_py venv, rules_python interpreter,
+  rules_rust sysroot, rules_swift modulemaps/headers, rules_go `go_path`,
+  rules_dotnet assemblies.
+- **Byte copy** (`copy_file` / `copy_to_bin` / `copy_to_directory` — one `cp`
+  spawn per file), used when the tool needs a real file (`realpath`,
+  executables): rules_js sources, rules_ts, rules_swc, rules_dotnet,
+  rules_foreign_cc.
+
+| Ruleset | Relocates | Via |
+|---|---|---|
+| rules_js | sources → bin; `node_modules` | `copy_to_bin` (per file) + eager `ctx.actions.symlink` |
+| rules_py / rules_python | venv / `site-packages`; interpreter | per-entry `ctx.actions.symlink` / `declare_symlink` |
+| rules_rust | compiler sysroot | eager `ctx.actions.symlink` (`_symlink_sysroot_tree`) |
+| rules_go | `GOPATH` tree | `go_path` (`mode="link"` symlink / `"copy"`) |
+| rules_swift | modulemaps + headers | eager `ctx.actions.symlink` |
+| rules_dotnet | runtime assemblies | eager `ctx.actions.symlink` + `copy_file` |
+| rules_ts / rules_swc | `tsconfig` + sources → bin | `copy_to_bin` (per file) |
+| rules_foreign_cc | source + dep build tree | in-spawn symlinks + `copy_directory` |
+
+The same relocation recurs per ecosystem — differing only in the target layout.
+Of 97 Bazel Central Registry modules that depend on `aspect_bazel_lib`, **51
+reference a copy/symlink construct** in their Starlark (source-grepped):
+
+- **JS** (rules_js, rules_ts, rules_swc, rules_esbuild/rollup/terser/webpack/jest,
+  rules_angular, rules_playwright): a coherent on-disk tree — sources in
+  `bazel-bin` + a real `node_modules` — so Node's `require`/`realpath` resolution
+  works.
+- **Python** (rules_py, rules_python, rules_pycross): a real `site-packages`/venv
+  layout with concrete entries — static analyzers (mypy/pyright) read it directly,
+  and the interpreter is symlinked.
+- **Proto / codegen** (protobuf, rules_proto_grpc, build_stack_rules_proto):
+  generated sources placed at their import paths for the downstream compiler.
+- **Compiler toolchains & native** (rules_rust sysroot, rules_go GOPATH,
+  gcc/llvm/arm/riscv toolchains, rules_dotnet): a real sysroot / GOPATH / toolchain
+  tree so the compiler finds its expected layout.
+- **Container images** (rules_img, rules_distroless, rules_apko): stage rootfs /
+  layer content into a tree.
+
+("References a construct" is a source-level signal, not a per-call audit.)
+
+Two rulesets already name the remote-exec materialization problem this fixes:
+rules_py declares each venv entry separately *"so Bazel's action cache treats each
+piece independently (no tree-artifact + remote-exec materialisation surprises)"*;
+rules_python forces `declare_symlink` because *"An RBE implementation, for
+example, …"*. An alias collapses both workarounds into one lazy, strategy-chosen
+relocation, with `requires-materialization: "content"` for the cases that need a
+real file.
+
 ## Proposal
 
 ### API
@@ -296,3 +351,33 @@ ordinary derived artifact with a normal, shared digest.
    links" be a guarantee a ruleset can require of a strategy (and does requiring
    it force `A` to be co-staged), or is a content laydown the expected way to
    satisfy such tools?
+8. **Requiring content materialization (execution requirement).** Some tools
+   (Node.js `realpath`, executables) cannot consume a followable symlink. The
+   action that runs such a tool declares that need with a single execution
+   requirement:
+
+   ```python
+   execution_requirements = {"requires-materialization": "content"}
+   ```
+
+   - `"content"`: the strategy must stage this action's inputs as real content —
+     regular files (a tree alias becomes a tree of regular files), via hardlink /
+     copy / reflink / remote digest — never as followable symlinks.
+   - absent, or `""`: no requirement; the strategy stages inputs however it likes
+     (symlink / hardlink / copy / digest). This is the default and today's
+     behavior.
+
+   This is deliberately **not** `no-sandbox` (too blunt: it disables sandboxing,
+   does not itself guarantee content, and is the gate-so-it-doesn't-fail
+   anti-pattern). It is a positive capability request, like `supports-path-mapping`:
+   any strategy honors it where it can (sandbox via hardlink/copy, local via
+   copy/reflink, remote via real files), and a strategy that cannot errors clearly
+   rather than staging a broken tree. It is **not alias-specific** — any action may
+   require content materialization of its inputs. And it is the sanctioned
+   exception to the "on-disk form is unobservable" fence: by default the form is
+   unspecified and the strategy is free; `requires-materialization: "content"` is
+   how an action opts into requiring one.
+
+   Open: the exact key/value spelling; whether it applies to all of the action's
+   inputs or only the aliased ones; and whether requiring it implies co-staging
+   `actual`.
